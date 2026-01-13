@@ -1,0 +1,111 @@
+#!/bin/bash
+
+#Основная инфа
+APP_NAME="ZAPRET"
+APP_BASE_DIR=
+APP_LAN_INTERFACE=
+APP_STRATEGY=
+APP_PID_FILE="/opt/var/run/zapret.pid"
+APP_HOSTS_USER=
+APP_HOSTS_USER_EXCLUDE=
+
+load_config()
+{
+	echo ""
+	echo "Грузим конфиг..."
+	APP_BASE_DIR=$(jq -r .basedir /opt/etc/zapret.config.json)
+	APP_LAN_INTERFACE=$(jq -r .interface /opt/etc/zapret.config.json)
+	APP_STRATEGY=$(jq -r .strategy /opt/etc/zapret.config.json)
+	APP_HOSTS_USER=$(jq -r .huser /opt/etc/zapret.config.json)
+	APP_HOSTS_USER_EXCLUDE=$(jq -r .huserexclude /opt/etc/zapret.config.json)
+	return 1
+}
+zapret_start()
+{
+	if [ -f "$APP_PID_FILE" ]; then
+        echo "$APP_NAME уже запущен."
+        return 1
+    fi
+	insmod /lib/modules/2.6.36.4brcmarm/kernel/net/netfilter/xt_NFQUEUE.ko
+	nfqws --user=root --dpi-desync-fwmark=0x40000000 --qnum=200 --pidfile="$APP_PID_FILE" --daemon $APP_STRATEGY --hostlist=$APP_HOSTS_USER --hostlist-exclude=$APP_HOSTS_USER_EXCLUDE 
+	echo "✓ $APP_NAME запущен успешно."
+	echo ""
+}
+zapret_stop()
+{
+	if [ ! -f "$APP_PID_FILE" ]; then
+        echo "$APP_NAME не запущен."
+		echo ""
+        return 1
+    fi
+	echo ""
+	echo "Останавливаем $APP_NAME..."
+    PID=$(cat "$APP_PID_FILE")
+    kill $PID 2>/dev/null
+    rm -f "$APP_PID_FILE"
+    echo "✓ Готово"
+	echo ""
+}
+iptables_rule_insert()
+{
+	RULE=$(iptables -t mangle -L POSTROUTING 2>/dev/null | grep "0x40000000")
+	if [ -n "$RULE" ]; then
+		echo "Правило iptables уже существует."
+		echo ""
+		return 1
+	fi
+	iptables -t mangle -I POSTROUTING -o $APP_LAN_INTERFACE -p tcp -m multiport --dports 80,443 -m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:6 -m mark ! --mark 0x40000000/0x40000000 -j NFQUEUE --queue-num 200 --queue-bypass
+	echo "Правило iptables создано."
+}
+iptables_rule_delete()
+{
+	RULE=$(iptables -t mangle -L POSTROUTING 2>/dev/null | grep "0x40000000")
+	if [ -z "$RULE" ]; then
+		echo "Правила iptables не существует."
+		echo ""
+		return 1
+	fi
+	iptables -t mangle -D POSTROUTING -o $APP_LAN_INTERFACE -p tcp -m multiport --dports 80,443 -m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:6 -m mark ! --mark 0x40000000/0x40000000 -j NFQUEUE --queue-num 200 --queue-bypass
+	echo "Правило iptables удалено."
+}
+start()
+{
+	load_config
+	iptables_rule_insert
+	zapret_start
+}
+stop()
+{
+	load_config
+	iptables_rule_delete
+	zapret_stop
+}
+help()
+{
+	echo ""
+    echo "  start   - Запустить $APP_NAME"
+    echo "  stop    - Остановить $APP_NAME"
+    echo "  restart - Перезапустить"
+	echo ""
+}
+case $1 in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        stop
+		start
+        ;;
+    help)
+        help
+        ;;
+	*)
+		echo ""
+		echo "Неизвестная команда: $1."
+		echo "Введите help для справки."
+		echo ""
+		;;
+esac
