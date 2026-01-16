@@ -50,7 +50,7 @@ class AdminPanel {
 		return response.json();
 	}
 	async GetFileContent( file ) {
-		const response = await fetch( '/zapret_file.php' , {
+		const response = await fetch( '/zapret_file_read.php' , {
 			method: 'POST',
 			headers: {
 				'Content-Type': 'application/json',
@@ -62,7 +62,19 @@ class AdminPanel {
 		});
 		return response.text();
 	}
-
+	async WriteFileContent( file , content ) {
+		const response = await fetch( '/zapret_file_write.php' , {
+			method: 'POST',
+			headers: {
+				'Content-Type': 'application/json',
+			},
+			body: JSON.stringify({
+				file: file,
+				content: content,
+				timeout: 300 // 5 минут
+			})
+		});
+	}
 	async LoadFiles() {
 		this.ShowLoader();
 		try {
@@ -83,7 +95,6 @@ class AdminPanel {
 			this.HideLoader();
 		}
 	}
-
 	async ControlApp( action ) {
 		this.ShowLoader();
 		this.LockButtons();
@@ -97,7 +108,6 @@ class AdminPanel {
 			this.HideLoader();
 		}
 	}
-
 	LockButtons() {
 		const buttons = document.querySelectorAll( '.btn' );
 			  buttons.forEach( btn => btn.disabled = true );
@@ -110,50 +120,30 @@ class AdminPanel {
 		};
 		return actions[ action ] || action;
 	}
-
 	async SaveAllFiles() {
 		this.ShowLoader();
-		
 		try {
 			// Проверяем изменения
-			const changes = [];
-			if (this.currentContent.file1 !== this.originalContent.file1) {
-				changes.push('file1');
+			let changes = 0;
+			if ( this.currentContent.file1 !== this.originalContent.file1 ) {
+				await this.WriteFileContent( "hosts" , this.currentContent.file1 );
+				this.originalContent.file1 = this.currentContent.file1;
+				changes++;
 			}
-			if (this.currentContent.file2 !== this.originalContent.file2) {
-				changes.push('file2');
+			if ( this.currentContent.file2 !== this.originalContent.file2 ) {
+				await this.WriteFileContent( "exclude" , this.currentContent.file2 );
+				this.originalContent.file2 = this.currentContent.file2;
+				changes++;
 			}
-			
-			if (changes.length === 0) {
-				this.ShowNotification('Нет изменений для сохранения', 'warning');
+			if ( changes === 0 ) {
+				this.ShowNotification( 'Нет изменений для сохранения' , 'warning' );
 				this.HideLoader();
 				return;
 			}
-			
-			// Здесь будут твои fetch запросы для сохранения каждого файла
-			// Пример:
-			// for (const file of changes) {
-			//     await fetch('/api/save-file', {
-			//         method: 'POST',
-			//         headers: { 'Content-Type': 'application/json' },
-			//         body: JSON.stringify({
-			//             name: file,
-			//             content: this.currentContent[file]
-			//         })
-			//     });
-			// }
-			
-			// Имитация сохранения
-			await new Promise(resolve => setTimeout(resolve, 800));
-			
-			// Обновляем оригинальный контент
-			this.originalContent.file1 = this.currentContent.file1;
-			this.originalContent.file2 = this.currentContent.file2;
-			
-			this.ShowNotification(`Сохранено файлов: ${changes.length}`, 'success');
-		} catch (error) {
-			console.error('Ошибка сохранения:', error);
-			this.ShowNotification('Ошибка сохранения файлов', 'error');
+			this.ShowNotification( `Сохранено файлов: ${changes}` , 'success' );
+		} catch ( error ) {
+			console.error( 'Ошибка сохранения:' , error );
+			this.ShowNotification( 'Ошибка сохранения файлов' , 'error' );
 		} finally {
 			this.HideLoader();
 		}
@@ -177,7 +167,7 @@ class AdminPanel {
 			document.getElementById( 'btnRestart' ).disabled = true;
 		}
 	}
-	ShowNotification(message, type = 'success') {
+	ShowNotification( message , type = 'success' ) {
 		const notification = document.getElementById('notification');
 		notification.textContent = message;
 		notification.className = 'notification';
@@ -194,24 +184,6 @@ class AdminPanel {
 		document.getElementById('loader').classList.remove('active');
 	}
 }
-
-// Глобальные функции для кнопок в заголовках файлов
-function reloadFile(fileId) {
-	const panel = window.adminPanel;
-	const textarea = document.getElementById(fileId);
-	textarea.value = panel.originalContent[fileId];
-	panel.currentContent[fileId] = panel.originalContent[fileId];
-	panel.showNotification('Файл восстановлен из оригинала', 'success');
-}
-
-function resetFile(fileId) {
-	const panel = window.adminPanel;
-	const textarea = document.getElementById(fileId);
-	textarea.value = '';
-	panel.currentContent[fileId] = '';
-	panel.showNotification('Файл очищен', 'warning');
-}
-
 // Инициализация при загрузке страницы
 document.addEventListener('DOMContentLoaded', async () => {
 	const adminPanel = new AdminPanel();

@@ -9,7 +9,7 @@ APP_PID_FILE="/opt/var/run/zapret.pid"
 APP_PID_FILE_WEB="/opt/var/run/zapret_web.pid"
 APP_HOSTS_USER=
 APP_HOSTS_USER_EXCLUDE=
-APP_SERVER_PORT=8300
+APP_SERVER_PORT=8350
 
 load_config()
 {
@@ -113,7 +113,7 @@ web_start()
     fi
 	load_config
 	echo "Запускаем сервер: $(nvram get lan_ipaddr 2>&1):$APP_SERVER_PORT"
-	php8-cli -S 0.0.0.0:$APP_SERVER_PORT -t "$APP_BASE_DIR/web" 2>&1 &
+	php8-cli -S 0.0.0.0:$APP_SERVER_PORT -t "$APP_BASE_DIR/web" 2>/dev/null &
 	echo $! > "$APP_PID_FILE_WEB"
 	echo "Сервер запущен."
 }
@@ -124,7 +124,7 @@ web_stop()
         return 1
     fi
 	PID=$(cat "$APP_PID_FILE_WEB")
-    kill $PID 2>/dev/null
+    kill "$PID" 2>/dev/null
     rm -f "$APP_PID_FILE_WEB"
 	echo "Сервер $APP_NAME остановлен."
 }
