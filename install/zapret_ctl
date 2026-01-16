@@ -6,8 +6,10 @@ APP_BASE_DIR=
 APP_LAN_INTERFACE=
 APP_STRATEGY=
 APP_PID_FILE="/opt/var/run/zapret.pid"
+APP_PID_FILE_WEB="/opt/var/run/zapret_web.pid"
 APP_HOSTS_USER=
 APP_HOSTS_USER_EXCLUDE=
+APP_SERVER_PORT=8300
 
 load_config()
 {
@@ -83,10 +85,57 @@ stop()
 help()
 {
 	echo ""
-    echo "  start   - Запустить $APP_NAME"
-    echo "  stop    - Остановить $APP_NAME"
-    echo "  restart - Перезапустить"
+    echo "  start        - Запустить $APP_NAME"
+    echo "  stop         - Остановить $APP_NAME"
+    echo "  restart      - Перезапустить"
+    echo "  web_start    - Запустить веб морду"
+    echo "  web_stop     - Остановить веб морду"
+    echo "  is_running   - Запущен - 1 | Не запущен - 0"
+    echo "  hosts_file   - Путь к файлу хостов"
+    echo "  exclude_file - Путь к файлу исключений"
 	echo ""
+}
+hosts_file()
+{
+	load_config
+	echo "$APP_HOSTS_USER"
+}
+exclude_file()
+{
+	load_config
+	echo "$APP_HOSTS_USER_EXCLUDE"
+}
+web_start()
+{
+	if [ -f "$APP_PID_FILE_WEB" ]; then
+        echo "Сервер $APP_NAME уже запущен."
+        return 1
+    fi
+	load_config
+	echo "Запускаем сервер: $(nvram get lan_ipaddr 2>&1):$APP_SERVER_PORT"
+	php8-cli -S 0.0.0.0:$APP_SERVER_PORT -t "$APP_BASE_DIR/web" 2>&1 &
+	echo $! > "$APP_PID_FILE_WEB"
+	echo "Сервер запущен."
+}
+web_stop()
+{
+	if [ ! -f "$APP_PID_FILE_WEB" ]; then
+        echo "Сервер $APP_NAME не запущен."
+        return 1
+    fi
+	PID=$(cat "$APP_PID_FILE_WEB")
+    kill $PID 2>/dev/null
+    rm -f "$APP_PID_FILE_WEB"
+	echo "Сервер $APP_NAME остановлен."
+}
+is_running()
+{
+	if [ -f "$APP_PID_FILE" ]; then
+        echo "1"
+        return 1
+    fi
+	echo "0"
+	return 1
 }
 case $1 in
     start)
@@ -101,6 +150,21 @@ case $1 in
         ;;
     help)
         help
+        ;;
+	web_start)
+        web_start
+        ;;
+	web_stop)
+        web_stop
+        ;;
+	is_running)
+        is_running
+        ;;
+	hosts_file)
+        hosts_file
+        ;;
+	exclude_file)
+        exclude_file
         ;;
 	*)
 		echo ""
